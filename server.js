@@ -1,28 +1,68 @@
-const express = require('express');
-const path = require('path');
+const express = require("express");
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+app.use(express.static("public"));
 
-// Routes
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+const clients = [];
+const messages = [];
+
+function sendAll(data) {
+    clients.forEach(c => {
+        c.res.write(`data: ${JSON.stringify(data)}\n\n`);
+    });
+}
+
+app.get("/stream", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const client = {
+        id: Date.now(),
+        res
+    };
+
+    clients.push(client);
+
+    req.on("close", () => {
+        const index = clients.indexOf(client);
+        if (index !== -1) clients.splice(index, 1);
+    });
 });
 
-app.get('/api/hello', (req, res) => {
-  res.json({ message: 'Hello from the server!' });
+app.get("/messages", (req, res) => {
+    res.json(messages);
 });
 
-// Error handling
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send('Something went wrong!');
+app.post("/send", (req, res) => {
+    let { name, text } = req.body;
+
+    let admin = false;
+
+    if (name === "*DUCK*") {
+        name = "duck";
+        admin = true;
+    }
+
+    const msg = {
+        id: Date.now(),
+        name,
+        text,
+        admin,
+        ts: Date.now()
+    };
+
+    messages.push(msg);
+
+    sendAll({
+        type: "msg",
+        ...msg
+    });
+
+    res.json({ ok: true });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+app.listen(3000, () => {
+    console.log("Server läuft");
 });
